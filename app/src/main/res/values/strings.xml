@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Attendance Assistant</string>
+    <string name="take_photo">Take Photo</string>
+    <string name="detectedtxt">Text will be displayed here</string>
 </resources>
