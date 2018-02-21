@@ -34,6 +34,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView tv;
     private TessBaseAPI tessBaseAPI;
     private Uri outputFileDir;
+    static final int PHOTO_REQUEST_CODE = 1;
+    private static final String lang = "eng";
+
 
 
     @Override
@@ -64,20 +67,16 @@ public class MainActivity extends AppCompatActivity {
 
      try {
 
-         String imagePath = DATA_PATH;
+         String imagePath = Environment.getExternalStorageDirectory().toString() + "/TesseractSample/imgs";
          String imageFilePath = imagePath + "/ocr.jpg";
          outputFileDir = Uri.fromFile(new File(imageFilePath));
 
-         Intent pic = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+         final Intent pic = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
          pic.putExtra(MediaStore.EXTRA_OUTPUT, outputFileDir);
          if (pic.resolveActivity(getPackageManager()) != null) {
-             startActivityForResult(pic, 100);
+             startActivityForResult(pic, PHOTO_REQUEST_CODE);
          }
 
-         File dir = new File(imagePath);
-         if (!dir.exists()) {
-             dir.mkdir();
-         }
 
      } catch (Exception e){
         Log.e(TAG, e.getMessage() );
@@ -90,37 +89,56 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 
-            prepareTessData();
-            startOcr(outputFileDir);
+//            prepareTessData();
+//            startOcr(outputFileDir);
+        //making photo
+        if (requestCode == PHOTO_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
+            doOCR();
+        } else {
+            Toast.makeText(this, "ERROR: Image was not obtained.", Toast.LENGTH_SHORT).show();
+        }
 
 
     }
+    private void doOCR() {
+        prepareTessData();
+        startOcr(outputFileDir);
+    }
+
     @SuppressLint("ShowToast")
     private void prepareTessData() {
         try{
             File dir = new File(DATA_PATH + TESS_DATA);
             if(!dir.exists()){
-                dir.mkdir();
+                if (!dir.mkdirs()) {
+                    Log.e(TAG, "ERROR: Creation of directory " + DATA_PATH+ TESS_DATA + " failed, check does Android Manifest have permission to write to external storage.");
+                } else {
+                    Log.i(TAG,"Created dir"+DATA_PATH+TESS_DATA);
+                }
             }
-            //get file list
-            String FileList[] = getAssets().list("");
+            //copy tess data files
+            String FileList[] = getAssets().list(TESS_DATA);
             for (String fileName : FileList){
                 //get file name
                 String pathToDataFile = DATA_PATH + TESS_DATA + "/" + fileName;
                 if(!(new File(pathToDataFile)).exists()) {
                     //write data to file
-                    InputStream in = getAssets().open(fileName);
+                    InputStream in = getAssets().open(TESS_DATA+ "/"+fileName);
                     OutputStream out = new FileOutputStream(pathToDataFile);
                     byte [] buff = new byte[1024];
                     int len ;
                     while ((len = in.read(buff)) > 0) {
                         out.write(buff,0,len);
                     }
+                    in.close();
+                    out.close();
+
+                    Log.d(TAG,"copied"+fileName+"totess");
                 }
             }
         } catch (Exception e){
             e.printStackTrace();
-            Toast.makeText(this,"Error",Toast.LENGTH_SHORT);
+            Toast.makeText(this,"Error unable to copy",Toast.LENGTH_SHORT);
         }
     }
 
@@ -128,25 +146,29 @@ public class MainActivity extends AppCompatActivity {
     private void startOcr(Uri imageUrl) {
         try{
             BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inSampleSize = 7;
+            options.inSampleSize = 4;
             Bitmap bitmap = BitmapFactory.decodeFile(imageUrl.getPath(),options);
-            String result = this.getText(bitmap);
+            String result =  extractText(bitmap);
             tv.setText(result);
         } catch (Exception e) {
-            Toast.makeText(this,"Errorsss",Toast.LENGTH_SHORT);
+            Toast.makeText(this,"error startOCR",Toast.LENGTH_SHORT);
 
         }
     }
 
-    private String getText(Bitmap bitmap){
+    private String extractText(Bitmap bitmap){
         try{
             tessBaseAPI = new TessBaseAPI();
-        }catch (Exception e){
+        }catch (Exception e) {
             Log.e(TAG, e.getMessage());
+            if (tessBaseAPI == null) {
+                Log.e(TAG, "TessBaseAPI is null. TessFactory not returning tess object.");
+            }
         }
         tessBaseAPI.init(DATA_PATH,"eng");
+        Log.d(TAG, "Training file loaded");
         tessBaseAPI.setImage(bitmap);
-        String retStr = "No result";
+        String retStr = "";
         try{
             retStr = tessBaseAPI.getUTF8Text();
         }catch (Exception e){
